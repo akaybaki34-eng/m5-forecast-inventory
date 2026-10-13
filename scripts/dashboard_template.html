@@ -1,0 +1,319 @@
+<title>Forecast to Inventory</title>
+<meta name="description" content="M5 Walmart forecast-to-inventory study: accuracy vs. inventory cost for 10 forecasting models.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one 1080px reading column; summary strip first, then four instruments (scatter, matrix, scenario bars, timeline) and a sortable ledger. */
+:root{
+  --bg:#F4F6F4; --surface:#FFFFFF; --ink:#16211D; --muted:#5A6863; --line:#DCE2DF; --soft:#EBEFEC;
+  --accent:#1A7F64; --accent-soft:#D5EDE5; --warn:#B45309; --warn-soft:#FBEBD5;
+  --m-SeasonalNaive:#98A2A0; --m-MovingAverage28:#B9C1BF; --m-ETS_ANA:#56625E; --m-Croston_SBA:#B9A88F; --m-TSB:#9C8B71;
+  --m-RandomForest:#1A7F64; --m-XGBoost:#C2410C; --m-LightGBM:#2563EB; --m-LightGBM_Tweedie:#7C3AED; --m-Ensemble:#16211D;
+  --f-display:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1513; --surface:#151D1A; --ink:#E4EBE8; --muted:#94A39D; --line:#27332F; --soft:#1C2622;
+  --accent:#3FBF98; --accent-soft:#173A30; --warn:#F59E0B; --warn-soft:#3A2A10;
+  --m-SeasonalNaive:#7D8886; --m-MovingAverage28:#5F6967; --m-ETS_ANA:#B3BEBA; --m-Croston_SBA:#A8977E; --m-TSB:#C8B696;
+  --m-RandomForest:#3FBF98; --m-XGBoost:#FB8A4C; --m-LightGBM:#6EA0FF; --m-LightGBM_Tweedie:#B392FF; --m-Ensemble:#E4EBE8;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1513; --surface:#151D1A; --ink:#E4EBE8; --muted:#94A39D; --line:#27332F; --soft:#1C2622;
+  --accent:#3FBF98; --accent-soft:#173A30; --warn:#F59E0B; --warn-soft:#3A2A10;
+  --m-SeasonalNaive:#7D8886; --m-MovingAverage28:#5F6967; --m-ETS_ANA:#B3BEBA; --m-Croston_SBA:#A8977E; --m-TSB:#C8B696;
+  --m-RandomForest:#3FBF98; --m-XGBoost:#FB8A4C; --m-LightGBM:#6EA0FF; --m-LightGBM_Tweedie:#B392FF; --m-Ensemble:#E4EBE8;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:20px;padding-block:28px 56px;display:grid;gap:40px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;letter-spacing:-.005em}
+h1{font-size:clamp(30px,4.6vw,46px);line-height:1.05;font-weight:700}
+h2{font-size:24px;font-weight:600}
+p{margin:0}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lede{max-width:66ch;color:var(--muted);font-size:16.5px}
+header{display:grid;gap:14px}
+.spec{display:flex;flex-wrap:wrap;gap:6px 18px;font-family:var(--f-mono);font-size:12.5px;color:var(--muted)}
+.spec b{color:var(--ink);font-weight:500}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.kpi{background:var(--surface);padding:16px 16px 14px;display:grid;gap:4px;align-content:start}
+.kpi .v{font-family:var(--f-display);font-size:34px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .v.up{color:var(--warn)} .kpi .v.down{color:var(--accent)}
+.kpi .l{font-size:13px;color:var(--muted);line-height:1.4}
+section{display:grid;gap:14px}
+.sec-head{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:10px 24px}
+.sec-head > div:first-child{display:grid;gap:6px;min-width:0;max-width:66ch}
+.sec-head p{color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:16px;min-width:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden;background:var(--surface)}
+.seg button{font:500 13px var(--f-body);color:var(--muted);background:transparent;border:0;padding:7px 12px;cursor:pointer}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+select{font:500 13px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:7px 10px;max-width:100%}
+button:focus-visible,select:focus-visible,th:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
+svg .lab{font-family:var(--f-body);font-size:12px;fill:var(--ink)}
+svg .grid{stroke:var(--line);stroke-width:1}
+.note{font-size:13px;color:var(--muted);max-width:75ch}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:500 12.5px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;padding:4px 10px 4px 8px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.chip i{width:9px;height:9px;border-radius:50%;display:inline-block;opacity:.35}
+.chip[aria-pressed="true"]{color:var(--ink);border-color:var(--muted)}
+.chip[aria-pressed="true"] i{opacity:1}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:13.5px}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font:500 12px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.04em;cursor:pointer;user-select:none}
+th:first-child,td:first-child{text-align:left}
+td.m{display:flex;gap:8px;align-items:center}
+td.m i{width:10px;height:10px;border-radius:2px;display:inline-block;flex:none}
+th[aria-sort] ::after{content:""}
+th[aria-sort="ascending"]::after{content:" ↑"} th[aria-sort="descending"]::after{content:" ↓"}
+.heat td.c{position:relative}
+.best{font-weight:600}
+.tag{font:500 11px var(--f-mono);padding:2px 6px;border-radius:3px;background:var(--accent-soft);color:var(--accent);margin-left:6px}
+.tag.w{background:var(--warn-soft);color:var(--warn)}
+.two{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+footer{border-top:1px solid var(--line);padding-top:18px;display:grid;gap:8px;color:var(--muted);font-size:13px}
+@media (max-width:760px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.two{grid-template-columns:minmax(0,1fr)}.kpi .v{font-size:28px}}
+@media (prefers-reduced-motion:no-preference){.bar{transition:width .35s ease}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">M5 · Walmart CA_3 · FOODS_3 · A-class SKUs</div>
+  <h1>Forecast to Inventory</h1>
+  <p class="lede">Ten demand-forecasting models scored twice: on forecast error, and on what their forecasts cost when they drive the same periodic-review, lost-sales stock policy. The most accurate model is not the cheapest one, and the safety-stock rule moves cost more than the model choice.</p>
+  <div class="spec" id="spec"></div>
+  <div class="kpis" id="kpis"></div>
+</header>
+
+<section aria-labelledby="s1">
+  <div class="sec-head">
+    <div><h2 id="s1">Accuracy against cost</h2>
+    <p>Each dot is a model. Left is more accurate, lower is cheaper. Outlined dots sit on the Pareto front: no other model beats them on both.</p></div>
+    <div class="controls">
+      <div class="seg" role="group" aria-label="Evaluation period" id="segPeriod">
+        <button type="button" data-v="test" aria-pressed="true">Held-out test · 28 days</button>
+        <button type="button" data-v="cont" aria-pressed="false">Simulation · 196 days</button>
+      </div>
+      <select id="ssPick" aria-label="Safety-stock rule" hidden>
+        <option value="demand_std">Safety stock: demand σ·√H (thesis)</option>
+        <option value="error_std">Safety stock: model error σ·√H</option>
+        <option value="cost_optimal">Safety stock: cost-optimal SL</option>
+        <option value="empirical_quantile">Safety stock: empirical quantile</option>
+      </select>
+    </div>
+  </div>
+  <div class="panel"><svg id="scatter" viewBox="0 0 900 430" role="img" aria-label="Scatter of WAPE against total inventory cost"></svg></div>
+  <p class="note" id="scatterNote"></p>
+</section>
+
+<section aria-labelledby="s2">
+  <div class="sec-head">
+    <div><h2 id="s2">Safety-stock rule × forecast model</h2>
+    <p>196-day simulation with stock carried between windows. Shading ranks each cell within the whole matrix; the best cell per column is marked.</p></div>
+    <div class="seg" role="group" aria-label="Matrix metric" id="segMetric">
+      <button type="button" data-v="cost" aria-pressed="true">Total cost</button>
+      <button type="button" data-v="fill" aria-pressed="false">Fill rate</button>
+      <button type="button" data-v="stock" aria-pressed="false">Avg. stock</button>
+    </div>
+  </div>
+  <div class="panel tablewrap"><table class="heat" id="matrix"></table></div>
+  <p class="note">The textbook rule assumes independent daily errors. Recursive forecast errors are autocorrelated, so the 12-day error spread is about 1.5× what σ·√H predicts and the 95 % target is missed. The empirical rule uses the 95th percentile of past 12-day cumulative errors instead.</p>
+</section>
+
+<section aria-labelledby="s3">
+  <div class="sec-head">
+    <div><h2 id="s3">Scenario explorer</h2>
+    <p>Change one inventory parameter at a time from the base case (R 7 days, L 5 days, 95 %, holding 25 %/yr, order cost 5, lost sale = 1× price). Thesis safety-stock rule, 196-day simulation.</p></div>
+    <select id="scen" aria-label="Inventory scenario"></select>
+  </div>
+  <div class="two">
+    <div class="panel"><svg id="bars" viewBox="0 0 560 330" role="img" aria-label="Total cost by model in the selected scenario"></svg></div>
+    <div class="panel" style="display:grid;gap:10px;align-content:start" id="scenSide"></div>
+  </div>
+</section>
+
+<section aria-labelledby="s4">
+  <div class="sec-head">
+    <div><h2 id="s4">A year of monthly backtests</h2>
+    <p>WAPE of each 28-day window. Every model is refitted with data before the window starts. The shaded window is the thesis test; the last one is the official M5 evaluation period.</p></div>
+  </div>
+  <div class="chips" id="chips"></div>
+  <div class="panel"><svg id="lines" viewBox="0 0 900 340" role="img" aria-label="Rolling WAPE by window"></svg></div>
+</section>
+
+<section aria-labelledby="s5">
+  <div class="sec-head">
+    <div><h2 id="s5">Model ledger</h2>
+    <p>Click a column to sort. Test window 25 Apr – 22 May 2016; rolling = mean of 14 windows.</p></div>
+  </div>
+  <div class="panel tablewrap"><table id="ledger"></table></div>
+</section>
+
+<section aria-labelledby="s6">
+  <div class="sec-head"><div><h2 id="s6">What the model looks at</h2>
+  <p>XGBoost, TreeSHAP on 2,500 recursive test-horizon rows. Share of mean |SHAP|. Associations, not causal effects.</p></div></div>
+  <div class="panel"><svg id="shap" viewBox="0 0 900 300" role="img" aria-label="SHAP importance"></svg></div>
+</section>
+
+<footer>
+  <p>Leakage controls: one feature function for training and recursive inference; rolling windows exclude the target day; demand classes, safety stocks and error quantiles use only data before each origin. Costs are comparative scenario costs with selling price as the monetary proxy.</p>
+  <p>Source: B.Sc. thesis (Industrial Engineering, Istanbul Gedik University, 2026), rebuilt and extended. Data: M5 Forecasting competition.</p>
+</footer>
+</div>
+
+<script>
+const D = /*__DATA__*/null;
+const LBL={SeasonalNaive:"Seasonal Naive",MovingAverage28:"Moving Avg 28",ETS_ANA:"ETS(A,N,A)",Croston_SBA:"Croston-SBA",TSB:"TSB",RandomForest:"Random Forest",XGBoost:"XGBoost",LightGBM:"LightGBM",LightGBM_Tweedie:"LightGBM-Tweedie",Ensemble:"Ensemble"};
+const SSL={demand_std:"Demand σ·√H",error_std:"Model error σ·√H",cost_optimal:"Cost-optimal SL",empirical_quantile:"Empirical quantile"};
+const col=m=>`var(--m-${m})`;
+const fmt=(v,d=0)=>v.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+const pct=(v,d=1)=>(v*100).toFixed(d)+" %";
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs={},parent){const e=document.createElementNS(NS,tag);for(const k in attrs){if(k==="text")e.textContent=attrs[k];else e.setAttribute(k,attrs[k]);}parent&&parent.appendChild(e);return e;}
+function niceTicks(lo,hi,n=5){const span=hi-lo,step0=span/n,mag=Math.pow(10,Math.floor(Math.log10(step0)));const step=[1,2,2.5,5,10].map(s=>s*mag).find(s=>span/s<=n)||mag*10;const out=[];const end=Math.ceil(hi/step)*step;for(let v=Math.floor(lo/step)*step;v<=end+1e-9;v+=step)out.push(+v.toFixed(10));return out;}
+const M=D.models;
+
+/* ---------- header ---------- */
+const A=D.accuracy, I=D.inventory_test, C=D.continuous;
+document.getElementById("spec").innerHTML=[
+ ["SKUs",D.meta.n_sku],["SKU-days",fmt(D.meta.rows)],["Policy","(R, S<sub>t</sub>) · R 7 · L 5 · 95 %"],["Backtest","14 × 28 days"],["Simulation",`${D.meta.cont_start} → ${D.meta.cont_end}`]
+].map(([k,v])=>`<span>${k} <b>${v}</b></span>`).join("");
+const xgbVsRf=I.XGBoost.total_cost/I.RandomForest.total_cost-1;
+const rfCont=C.RandomForest.demand_std.cost, rfEmp=C.RandomForest.empirical_quantile.cost;
+const k=[
+ [`+${(xgbVsRf*100).toFixed(0)} %`,"up",`inventory cost of XGBoost vs Random Forest on the test, although XGBoost forecasts better (${pct(A.XGBoost.wape_test)} vs ${pct(A.RandomForest.wape_test)} WAPE)`],
+ [`−${((1-rfEmp/rfCont)*100).toFixed(0)} %`,"down",`total cost when the same Random Forest forecasts use empirical-quantile safety stock instead of σ·√H`],
+ [`${A.LightGBM_Tweedie.wins} / 14`,"",`monthly windows won by LightGBM-Tweedie, the most accurate model over a full year`],
+ [pct(D.meta.coincide,0),"",`of SKUs where the most accurate model is also the cheapest one`]];
+document.getElementById("kpis").innerHTML=k.map(([v,c,l])=>`<div class="kpi"><div class="v ${c}">${v}</div><div class="l">${l}</div></div>`).join("");
+
+/* ---------- segmented controls ---------- */
+function seg(id,cb){const g=document.getElementById(id);g.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;g.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false"));cb(b.dataset.v);});}
+
+/* ---------- scatter ---------- */
+let period="test", ssRule="demand_std";
+function pareto(pts){return pts.map(p=>!pts.some(q=>q!==p&&q.x<=p.x&&q.y<=p.y&&(q.x<p.x||q.y<p.y)));}
+function drawScatter(){
+  const svg=document.getElementById("scatter");svg.innerHTML="";
+  const pts=M.map(m=>({m,x:(period==="test"?A[m].wape_test:A[m].wape_roll)*100,y:period==="test"?I[m].total_cost:C[m][ssRule].cost}));
+  const W=900,H=430,L=78,R=150,T=18,B=48;
+  const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
+  const xt=niceTicks(Math.min(...xs)-0.5,Math.max(...xs)+0.5,6),yt=niceTicks(Math.min(...ys)*0.985,Math.max(...ys)*1.015,5);
+  const x0=xt[0],x1=xt[xt.length-1],y0=yt[0],y1=yt[yt.length-1];
+  const sx=v=>L+(v-x0)/(x1-x0)*(W-L-R), sy=v=>H-B-(v-y0)/(y1-y0)*(H-T-B);
+  xt.forEach(t=>{el("line",{x1:sx(t),x2:sx(t),y1:T,y2:H-B,class:"grid"},svg);el("text",{x:sx(t),y:H-B+18,"text-anchor":"middle",text:t+" %"},svg);});
+  yt.forEach(t=>{el("line",{x1:L,x2:W-R,y1:sy(t),y2:sy(t),class:"grid"},svg);el("text",{x:L-8,y:sy(t)+4,"text-anchor":"end",text:fmt(t)},svg);});
+  el("text",{x:(L+W-R)/2,y:H-8,"text-anchor":"middle",text:period==="test"?"WAPE, test window":"Mean WAPE, 14 windows"},svg);
+  el("text",{x:14,y:(T+H-B)/2,"text-anchor":"middle",transform:`rotate(-90 14 ${(T+H-B)/2})`,text:"Total relevant cost"},svg);
+  const eff=pareto(pts);const front=pts.filter((p,i)=>eff[i]).sort((a,b)=>a.x-b.x);
+  el("polyline",{points:front.map(p=>`${sx(p.x)},${sy(p.y)}`).join(" "),fill:"none",style:"stroke:var(--ink)","stroke-dasharray":"4 4","stroke-width":1.2},svg);
+  const placed=[];
+  pts.slice().sort((a,b)=>a.x-b.x).forEach(p=>{const i=pts.indexOf(p);
+    el("circle",{cx:sx(p.x),cy:sy(p.y),r:eff[i]?8:6,style:`fill:${col(p.m)};stroke:${eff[i]?"var(--ink)":"var(--surface)"}`,"stroke-width":eff[i]?2:1.5},svg);
+    const px=sx(p.x),py=sy(p.y);const crowded=placed.some(q=>Math.abs(q[0]-px)<110&&Math.abs(q[1]-py)<16);placed.push([px,py]);
+    el("text",{x:crowded?px-11:px+11,y:py+4,"text-anchor":crowded?"end":"start",class:"lab",text:LBL[p.m]},svg);});
+  const best=pts.reduce((a,b)=>a.y<b.y?a:b),acc=pts.reduce((a,b)=>a.x<b.x?a:b);
+  document.getElementById("scatterNote").textContent=period==="test"
+   ?`Most accurate: ${LBL[acc.m]} (${acc.x.toFixed(2)} % WAPE). Cheapest: ${LBL[best.m]} (${fmt(best.y)}). Random Forest's +${(A.RandomForest.bias_test*100).toFixed(1)} % bias holds more stock, which costs less than the lost sales it prevents.`
+   :`${SSL[ssRule]} rule. Most accurate over the year: ${LBL[acc.m]}. Cheapest: ${LBL[best.m]} (${fmt(best.y)}). Switch the safety-stock rule to see the cost axis shift for every model.`;
+}
+seg("segPeriod",v=>{period=v;document.getElementById("ssPick").hidden=v!=="cont";drawScatter();});
+document.getElementById("ssPick").addEventListener("change",e=>{ssRule=e.target.value;drawScatter();});
+drawScatter();
+
+/* ---------- matrix ---------- */
+const RULES=["demand_std","error_std","cost_optimal","empirical_quantile"];
+function drawMatrix(metric){
+  const t=document.getElementById("matrix");
+  const val=(m,s)=>C[m][s][metric];
+  const all=M.flatMap(m=>RULES.map(s=>val(m,s))).sort((a,b)=>a-b);
+  const lowGood=metric!=="fill";
+  const rank=v=>{const r=all.indexOf(v)/(all.length-1);return lowGood?1-r:r;};
+  const f=v=>metric==="cost"?fmt(v):metric==="fill"?pct(v,2):fmt(v,1);
+  const bestIn=s=>{const vs=M.map(m=>val(m,s));return lowGood?Math.min(...vs):Math.max(...vs);};
+  let h=`<thead><tr><th scope="col">Model</th>${RULES.map(s=>`<th scope="col">${SSL[s]}</th>`).join("")}</tr></thead><tbody>`;
+  M.forEach(m=>{h+=`<tr><td class="m"><i style="background:${col(m)}"></i>${LBL[m]}</td>`+RULES.map(s=>{const v=val(m,s),a=Math.round(rank(v)*55);
+    return `<td class="c${v===bestIn(s)?" best":""}" style="background:color-mix(in srgb,var(--accent) ${a}%,transparent)">${f(v)}${v===bestIn(s)?'<span class="tag">best</span>':""}</td>`;}).join("")+"</tr>";});
+  t.innerHTML=h+"</tbody>";
+}
+seg("segMetric",drawMatrix);drawMatrix("cost");
+
+/* ---------- scenario explorer ---------- */
+const scenSel=document.getElementById("scen");
+const sname=s=>{if(s==="main")return"Base case";let m;
+ if((m=s.match(/^L=(\d+)\|SL=([\d.]+)$/)))return`Lead time ${m[1]} d · service ${Math.round(+m[2]*100)} %`;
+ if((m=s.match(/^cs=([\d.]+)$/)))return`Lost sale = ${m[1]} × price`;
+ if((m=s.match(/^h=([\d.]+)\|K=([\d.]+)$/)))return`Holding ${Math.round(+m[1]*100)} %/yr · order cost ${+m[2]}`;return s;};
+const groups=[["Base",s=>s==="main"],["Lead time × service level",s=>s.startsWith("L=")],["Lost-sale penalty",s=>s.startsWith("cs=")],["Holding rate × order cost",s=>s.startsWith("h=")]];
+scenSel.innerHTML=groups.map(([g,fn])=>`<optgroup label="${g}">${Object.keys(D.scenarios).filter(fn).map(s=>`<option value="${s}">${sname(s)}</option>`).join("")}</optgroup>`).join("");
+function drawBars(){
+  const s=scenSel.value,c=D.scenarios[s];const rows=M.map(m=>({m,v:c[m]})).sort((a,b)=>a.v-b.v);const best=rows[0].v;
+  const svg=document.getElementById("bars");svg.innerHTML="";const W=560,L=128,R=96,rh=30,T=6;
+  const max=rows[rows.length-1].v;
+  rows.forEach((r,i)=>{const y=T+i*rh,w=(W-L-R)*r.v/max;
+    el("text",{x:L-10,y:y+18,"text-anchor":"end",class:"lab",text:LBL[r.m]},svg);
+    el("rect",{x:L,y:y+5,width:w,height:18,rx:2,class:"bar",style:`fill:${col(r.m)}`},svg);
+    el("text",{x:L+w+6,y:y+18,text:i===0?fmt(r.v):`+${((r.v/best-1)*100).toFixed(1)} %`},svg);});
+  svg.setAttribute("viewBox",`0 0 ${W} ${T+rows.length*rh+4}`);
+  const counts={};Object.values(D.scenarios).forEach(sc=>{const b=M.reduce((a,m)=>sc[m]<sc[a]?m:a,M[0]);counts[b]=(counts[b]||0)+1;});
+  const n=Object.keys(D.scenarios).length;
+  document.getElementById("scenSide").innerHTML=`<div class="eyebrow">This scenario</div>
+   <div style="font:700 26px var(--f-display)">${LBL[rows[0].m]}</div>
+   <p class="note">cheapest at ${fmt(best)} cost units; runner-up ${LBL[rows[1].m]} is ${((rows[1].v/best-1)*100).toFixed(1)} % more expensive. Bar labels show the gap to the cheapest model.</p>
+   <div class="eyebrow" style="margin-top:6px">Across all ${n} scenarios</div>
+   ${Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([m,c])=>`<div style="display:flex;justify-content:space-between;gap:10px"><span class="legend"><span><i style="background:${col(m)}"></i>${LBL[m]}</span></span><b style="font-family:var(--f-mono);font-weight:500">${c} / ${n}</b></div>`).join("")}`;
+}
+scenSel.addEventListener("change",drawBars);drawBars();
+
+/* ---------- rolling lines ---------- */
+const on=new Set(["SeasonalNaive","ETS_ANA","RandomForest","XGBoost","LightGBM_Tweedie","Ensemble"]);
+const chips=document.getElementById("chips");
+chips.innerHTML=M.map(m=>`<button type="button" class="chip" data-m="${m}" aria-pressed="${on.has(m)}"><i style="background:${col(m)}"></i>${LBL[m]}</button>`).join("");
+chips.addEventListener("click",e=>{const b=e.target.closest(".chip");if(!b)return;const m=b.dataset.m;on.has(m)?on.delete(m):on.add(m);b.setAttribute("aria-pressed",on.has(m));drawLines();});
+function drawLines(){
+  const svg=document.getElementById("lines");svg.innerHTML="";const W=900,H=340,L=56,R=20,T=14,B=40;
+  const dates=D.rolling.dates,n=dates.length;const vals=M.flatMap(m=>D.rolling.series[m]);
+  const yt=niceTicks(Math.min(...vals)*100-1,Math.max(...vals)*100+1,6);const y0=yt[0],y1=yt[yt.length-1];
+  const sx=i=>L+i*(W-L-R)/(n-1),sy=v=>H-B-(v-y0)/(y1-y0)*(H-T-B);
+  const ti=dates.indexOf("2016-04-25");
+  if(ti>=0)el("rect",{x:sx(ti)-14,y:T,width:28,height:H-T-B,style:"fill:var(--warn-soft)"},svg);
+  yt.forEach(t=>{el("line",{x1:L,x2:W-R,y1:sy(t),y2:sy(t),class:"grid"},svg);el("text",{x:L-8,y:sy(t)+4,"text-anchor":"end",text:t+" %"},svg);});
+  dates.forEach((d,i)=>{if(i%2===0||i===n-1)el("text",{x:sx(i),y:H-B+18,"text-anchor":"middle",text:d.slice(2,7).replace("-","/")},svg);});
+  M.filter(m=>on.has(m)).forEach(m=>{const s=D.rolling.series[m];
+    el("polyline",{points:s.map((v,i)=>`${sx(i)},${sy(v*100)}`).join(" "),fill:"none",style:`stroke:${col(m)}`,"stroke-width":m==="LightGBM_Tweedie"||m==="RandomForest"||m==="XGBoost"?2.4:1.5,"stroke-linejoin":"round"},svg);
+    el("circle",{cx:sx(n-1),cy:sy(s[n-1]*100),r:3.5,style:`fill:${col(m)}`},svg);});
+}
+drawLines();
+
+/* ---------- ledger ---------- */
+const COLS=[["model","Model",null],["wape_test","Test WAPE",v=>pct(v,2)],["bias_test","Bias",v=>(v>0?"+":"")+pct(v,1)],["wape_roll","Rolling WAPE",v=>pct(v,2)],["wins","Wins",v=>v],["wape_m5","M5 eval WAPE",v=>pct(v,2)],["fill_rate","Fill rate",v=>pct(v,2)],["lost_units","Lost units",v=>fmt(v)],["total_cost","Test cost",v=>fmt(v)],["emp","196-day cost, empirical SS",v=>fmt(v)]];
+const rowsL=M.map(m=>({model:m,...A[m],fill_rate:I[m].fill_rate,lost_units:I[m].lost_units,total_cost:I[m].total_cost,emp:C[m].empirical_quantile.cost}));
+let sortK="total_cost",sortDir=1;
+function drawLedger(){
+  const t=document.getElementById("ledger");const r=rowsL.slice().sort((a,b)=>sortK==="model"?LBL[a.model].localeCompare(LBL[b.model])*sortDir:(a[sortK]-b[sortK])*sortDir);
+  const ext=v=>["LightGBM_Tweedie","Croston_SBA","TSB","Ensemble"].includes(v);
+  t.innerHTML=`<thead><tr>${COLS.map(([k,l])=>`<th scope="col" tabindex="0" data-k="${k}" ${k===sortK?`aria-sort="${sortDir>0?"ascending":"descending"}"`:""}>${l}</th>`).join("")}</tr></thead><tbody>`+
+   r.map(x=>`<tr>${COLS.map(([k,,f])=>k==="model"?`<td class="m"><i style="background:${col(x.model)}"></i>${LBL[x.model]}${ext(x.model)?'<span class="tag w">new</span>':""}</td>`:`<td>${f(x[k])}</td>`).join("")}</tr>`).join("")+"</tbody>";
+}
+document.getElementById("ledger").addEventListener("click",e=>{const th=e.target.closest("th");if(!th)return;const k=th.dataset.k;sortDir=k===sortK?-sortDir:(k==="wins"?-1:1);sortK=k;drawLedger();});
+document.getElementById("ledger").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.matches("th"))e.target.click();});
+drawLedger();
+
+/* ---------- shap ---------- */
+(function(){const svg=document.getElementById("shap");const rows=D.shap;const W=900,L=150,R=70,rh=28;const max=rows[0].s;
+ rows.forEach((r,i)=>{const y=i*rh,w=(W-L-R)*r.s/max;el("text",{x:L-10,y:y+18,"text-anchor":"end",text:r.f},svg);
+  el("rect",{x:L,y:y+6,width:w,height:16,rx:2,style:`fill:${i<2?"var(--m-XGBoost)":"color-mix(in srgb,var(--m-XGBoost) 45%,transparent)"}`},svg);
+  el("text",{x:L+w+6,y:y+18,text:pct(r.s,1)},svg);});
+ svg.setAttribute("viewBox",`0 0 ${W} ${rows.length*rh+4}`);})();
+</script>

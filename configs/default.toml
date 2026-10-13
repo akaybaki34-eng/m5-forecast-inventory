@@ -1,0 +1,91 @@
+# Default experiment configuration.
+# Every number that affects a result lives here, so a run is fully described by this file.
+
+[data]
+raw_dir = "data/raw"
+cache_dir = "data/cache"
+store_id = "CA_3"
+dept_id = "FOODS_3"
+abc_a_cutoff = 0.80          # cumulative revenue share for class A
+abc_b_cutoff = 0.95          # cumulative revenue share for class B
+# "expost"  = ABC on the full history (thesis definition, look-ahead in scope selection)
+# "prospective" = ABC only on data strictly before the first backtest origin
+abc_mode = "expost"
+
+[segmentation]
+adi_cutoff = 1.32            # Syntetos, Boylan & Croston (2005)
+cv2_cutoff = 0.49
+
+[backtest]
+horizon = 28
+# Main held-out test origin (thesis): 2016-04-25. Validation origin (thesis): 2016-03-28.
+validation_origin = "2016-03-28"
+test_origin = "2016-04-25"
+# Extra, never-used-in-thesis held-out window: the official M5 evaluation period.
+m5_eval_origin = "2016-05-23"
+# Rolling origins: 13 consecutive 28-day windows = one full year (2015-05-25 .. 2016-05-23)
+first_rolling_origin = "2015-05-25"
+n_rolling_origins = 13
+# Forecast this many days beyond each 28-day window so the stock policy always sees a
+# full protection period (R + max L).
+extra_forecast_days = 14
+
+[models]
+classical = ["SeasonalNaive", "MovingAverage28", "ETS_ANA", "Croston_SBA", "TSB"]
+ml = ["RandomForest", "XGBoost", "LightGBM", "LightGBM_Tweedie"]
+# Models that are part of the original thesis (used for like-for-like comparisons)
+thesis_models = ["SeasonalNaive", "MovingAverage28", "ETS_ANA", "RandomForest", "XGBoost", "LightGBM"]
+random_state = 42
+
+[models.RandomForest]
+n_estimators = 50
+max_depth = 14
+min_samples_leaf = 8
+max_features = 0.6
+max_samples = 0.2
+
+[models.XGBoost]
+n_estimators = 300
+learning_rate = 0.05
+max_depth = 6
+min_child_weight = 20
+subsample = 0.8
+colsample_bytree = 0.8
+
+[models.LightGBM]
+n_estimators = 300
+learning_rate = 0.05
+num_leaves = 31
+min_child_samples = 50
+
+[models.LightGBM_Tweedie]
+# Extension: count-aware Tweedie loss and native categorical item handling (thesis future work #9)
+n_estimators = 400
+learning_rate = 0.05
+num_leaves = 63
+min_child_samples = 50
+tweedie_variance_power = 1.2
+subsample = 0.8
+subsample_freq = 1
+colsample_bytree = 0.8
+
+[inventory]
+review_period = 7            # R
+lead_time = 5                # L
+service_level = 0.95         # nominal service parameter -> z
+holding_rate = 0.25          # h, annual
+shortage_multiplier = 1.0    # c_s, lost-sales penalty as a multiple of selling price
+order_cost = 5.0             # K, per order line
+demand_std_window = 90       # days before the origin used for sigma of demand
+error_std_origins = 4        # number of previous origins used for model-specific error sigma
+
+[sensitivity]
+lead_times = [3, 5, 7]
+service_levels = [0.90, 0.95, 0.99]
+shortage_multipliers = [0.25, 0.5, 1.0, 2.0]
+holding_rates = [0.10, 0.25, 0.40]
+order_costs = [1.0, 5.0, 10.0]
+
+[analysis]
+bootstrap_reps = 10000
+shap_sample = 2500

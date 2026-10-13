@@ -1,0 +1,11 @@
+,WAPE,total_cost,pareto_efficient
+SeasonalNaive,0.584724,110659,False
+MovingAverage28,0.516516,108334,False
+ETS_ANA,0.492113,108958,False
+Croston_SBA,0.528087,113291,False
+TSB,0.508798,100433,False
+RandomForest,0.48891,94707.2,True
+XGBoost,0.480661,106159,False
+LightGBM,0.497793,98813.1,False
+LightGBM_Tweedie,0.470265,95391.1,True
+Ensemble,0.475963,98425.7,False
