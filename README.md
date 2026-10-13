@@ -1,6 +1,6 @@
 # Forecast → Inventory: does a more accurate forecast make a cheaper stock policy?
 
-[![ci](https://img.shields.io/badge/tests-25%20passing-1A7F64)](tests/) ![python](https://img.shields.io/badge/python-3.11%2B-2563EB) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
+[![ci](https://github.com/akaybaki34-eng/m5-forecast-inventory/actions/workflows/ci.yml/badge.svg)](https://github.com/akaybaki34-eng/m5-forecast-inventory/actions/workflows/ci.yml) ![python](https://img.shields.io/badge/python-3.11%2B-2563EB) ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
 *[Türkçe özet → README.tr.md](README.tr.md)*
 
